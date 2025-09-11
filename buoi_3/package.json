@@ -1,0 +1,13 @@
+{
+  "name": "buoi_3_dashboard",
+  "version": "1.0.0",
+  "description": "ESP32 telemetry dashboard with Socket.IO (v2)",
+  "main": "js/socket_io_server.js",
+  "scripts": {
+    "start": "node js/socket_io_server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "2.4.1"
+  }
+}

@@ -13,7 +13,25 @@ const uint16_t port = 3000;
 
 SocketIoClient socket;
 
+const int LED_PIN = 2; // onboard LED pin
+
+void handleControl(const char * payload, size_t length) {
+  Serial.print("Received control: ");
+  Serial.println(payload);
+  String s(payload, length);
+  if (s.indexOf("\"led\":true") >= 0) {
+    digitalWrite(LED_PIN, HIGH);
+    Serial.println("LED ON");
+  } else if (s.indexOf("\"led\":false") >= 0) {
+    digitalWrite(LED_PIN, LOW);
+    Serial.println("LED OFF");
+  }
+}
+
 void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
   Serial.begin(115200);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
@@ -28,17 +46,23 @@ void setup() {
     Serial.println("Connected to Socket.IO server!");
     socket.emit("hello", "\"Hello from ESP32\"");
   });
+
+  socket.on("control", handleControl);
 }
 
 void loop() {
   socket.loop();
 
-  // Gửi telemetry mỗi 5 giây
+  // Gửi telemetry mỗi 5 giây (fake data)
   static unsigned long lastSend = 0;
   if (millis() - lastSend > 5000) {
     lastSend = millis();
-    String telemetry = "{\"temp\":25.5,\"hum\":60}";
-    socket.emit("telemetry", telemetry.c_str());
-    Serial.println("Sent telemetry");
+    float temp = random(200, 350) / 10.0; // 20.0 - 35.0
+    float hum = random(400, 700) / 10.0;  // 40.0 - 70.0
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"temp\":%.1f,\"hum\":%.1f}", temp, hum);
+    socket.emit("telemetry", buf);
+    Serial.print("Sent telemetry: ");
+    Serial.println(buf);
   }
 }
