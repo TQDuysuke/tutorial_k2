@@ -1,0 +1,274 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ESP32 Telemetry Dashboard with Charts</title>
+  <style>
+    body { 
+      font-family: Arial, Helvetica, sans-serif; 
+      padding: 20px; 
+      background-color: #f5f5f5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .card { 
+      background: white;
+      border: 1px solid #ddd; 
+      padding: 20px; 
+      border-radius: 8px; 
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .metrics { display: flex; gap: 20px; flex-wrap: wrap; }
+    .metric { 
+      flex: 1; 
+      min-width: 150px; 
+      text-align: center; 
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 6px;
+    }
+    .metric-value { font-size: 24px; font-weight: bold; color: #007bff; }
+    .metric-label { font-size: 14px; color: #666; margin-top: 5px; }
+    .controls { display: flex; gap: 10px; align-items: center; }
+    button { 
+      padding: 10px 20px; 
+      border: none; 
+      border-radius: 5px; 
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-toggle { background: #28a745; color: white; }
+    .btn-toggle:hover { background: #218838; }
+    .btn-on { background: #007bff; color: white; }
+    .btn-off { background: #6c757d; color: white; }
+    .chart-container { 
+      position: relative; 
+      height: 400px; 
+      margin-top: 20px;
+    }
+    .status { 
+      padding: 8px 12px; 
+      border-radius: 4px; 
+      font-size: 12px; 
+      display: inline-block;
+    }
+    .status.connected { background: #d4edda; color: #155724; }
+    .status.disconnected { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌡️ ESP32 Telemetry Dashboard</h1>
+    
+    <!-- Current Values -->
+    <div class="card">
+      <h3>Current Readings</h3>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value" id="temp">--</div>
+          <div class="metric-label">Temperature (°C)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="hum">--</div>
+          <div class="metric-label">Humidity (%)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="seen">--</div>
+          <div class="metric-label">Last Update</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <h3>LED Control</h3>
+      <div class="controls">
+        <button id="toggle" class="btn-toggle">Toggle LED</button>
+        <button id="ledOn" class="btn-on">LED ON</button>
+        <button id="ledOff" class="btn-off">LED OFF</button>
+        <span id="connectionStatus" class="status disconnected">Disconnected</span>
+      </div>
+    </div>
+
+    <!-- Realtime Chart -->
+    <div class="card">
+      <h3>Realtime Chart</h3>
+      <div class="chart-container">
+        <canvas id="telemetryChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Server Info -->
+    <div class="card">
+      <h3>Connection Info</h3>
+      <p><strong>Server:</strong> <span id="serverInfo">--</span></p>
+      <p><strong>Data Points:</strong> <span id="dataCount">0</span></p>
+    </div>
+  </div>
+
+  <!-- Include Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Server connection setup
+    const params = new URLSearchParams(window.location.search);
+    const server = params.get('server') || window.location.origin;
+    const socket = io(server);
+
+    // DOM elements
+    const tempEl = document.getElementById('temp');
+    const humEl = document.getElementById('hum');
+    const seenEl = document.getElementById('seen');
+    const toggleBtn = document.getElementById('toggle');
+    const ledOnBtn = document.getElementById('ledOn');
+    const ledOffBtn = document.getElementById('ledOff');
+    const statusEl = document.getElementById('connectionStatus');
+    const serverInfoEl = document.getElementById('serverInfo');
+    const dataCountEl = document.getElementById('dataCount');
+
+    // Chart setup
+    const ctx = document.getElementById('telemetryChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: 'rgb(255, 99, 132)',
+          backgroundColor: 'rgba(255, 99, 132, 0.2)',
+          tension: 0.1,
+          yAxisID: 'y'
+        }, {
+          label: 'Humidity (%)',
+          data: [],
+          borderColor: 'rgb(54, 162, 235)',
+          backgroundColor: 'rgba(54, 162, 235, 0.2)',
+          tension: 0.1,
+          yAxisID: 'y1'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        scales: {
+          x: {
+            display: true,
+            title: {
+              display: true,
+              text: 'Time'
+            }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: {
+              display: true,
+              text: 'Temperature (°C)'
+            },
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            title: {
+              display: true,
+              text: 'Humidity (%)'
+            },
+            grid: {
+              drawOnChartArea: false,
+            },
+          }
+        },
+        plugins: {
+          title: {
+            display: true,
+            text: 'ESP32 Telemetry Over Time'
+          }
+        }
+      }
+    });
+
+    // Data storage
+    let dataPoints = 0;
+    const maxDataPoints = 50; // Keep last 50 readings
+
+    // Server info
+    serverInfoEl.textContent = server;
+
+    // Socket events
+    socket.on('connect', () => {
+      console.log('Connected to server:', server);
+      statusEl.textContent = 'Connected';
+      statusEl.className = 'status connected';
+      socket.emit('register', 'web');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      statusEl.textContent = 'Disconnected';
+      statusEl.className = 'status disconnected';
+    });
+
+    socket.on('telemetry', (data) => {
+      try {
+        const telemetry = typeof data === 'string' ? JSON.parse(data) : data;
+        const timestamp = new Date().toLocaleTimeString();
+        
+        // Update current values
+        tempEl.textContent = telemetry.temp.toFixed(1);
+        humEl.textContent = telemetry.hum.toFixed(1);
+        seenEl.textContent = timestamp;
+
+        // Update chart
+        chart.data.labels.push(timestamp);
+        chart.data.datasets[0].data.push(telemetry.temp);
+        chart.data.datasets[1].data.push(telemetry.hum);
+
+        // Keep only last maxDataPoints
+        if (chart.data.labels.length > maxDataPoints) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+          chart.data.datasets[1].data.shift();
+        }
+
+        chart.update('none'); // Update without animation for performance
+
+        // Update data counter
+        dataPoints++;
+        dataCountEl.textContent = dataPoints;
+
+      } catch (error) {
+        console.error('Error processing telemetry:', error);
+      }
+    });
+
+    // Control buttons
+    toggleBtn.addEventListener('click', () => {
+      socket.emit('control', JSON.stringify({ cmd: 'toggle' }));
+    });
+
+    ledOnBtn.addEventListener('click', () => {
+      socket.emit('control', JSON.stringify({ cmd: 'on' }));
+    });
+
+    ledOffBtn.addEventListener('click', () => {
+      socket.emit('control', JSON.stringify({ cmd: 'off' }));
+    });
+
+    // Optional: Auto-scroll chart to show latest data
+    setInterval(() => {
+      if (chart.data.labels.length > 20) {
+        chart.options.scales.x.min = chart.data.labels[chart.data.labels.length - 20];
+        chart.options.scales.x.max = chart.data.labels[chart.data.labels.length - 1];
+      }
+    }, 5000);
+  </script>
+</body>
+</html>

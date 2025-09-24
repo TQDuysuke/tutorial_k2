@@ -1,0 +1,43 @@
+{
+  "name": "advanced-esp32-dashboard",
+  "version": "2.0.0",
+  "description": "Advanced Multi-ESP32 IoT Dashboard with dynamic cards and individual charts",
+  "main": "js/socket_io_server.js",
+  "scripts": {
+    "start": "node js/socket_io_server.js",
+    "dev": "nodemon js/socket_io_server.js",
+    "test": "node test/device-simulator.js"
+  },
+  "keywords": [
+    "esp32",
+    "iot",
+    "dashboard",
+    "socket.io",
+    "telemetry",
+    "real-time",
+    "multi-device",
+    "charts"
+  ],
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "2.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "author": {
+    "name": "ESP32 IoT Team",
+    "email": "iot@example.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-repo/esp32-dashboard"
+  },
+  "bugs": {
+    "url": "https://github.com/your-repo/esp32-dashboard/issues"
+  }
+}

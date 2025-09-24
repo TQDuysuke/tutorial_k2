@@ -1,0 +1,455 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi-ESP32 Dashboard</title>
+  <style>
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      padding: 20px; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      margin: 0;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 20px;
+    }
+    
+    .device-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      border-left: 4px solid #28a745;
+      transition: all 0.3s ease;
+    }
+    
+    .device-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .device-card.disconnected {
+      border-left-color: #dc3545;
+      opacity: 0.7;
+    }
+    
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    
+    .device-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .device-status {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    .status-online {
+      background: #d4edda;
+      color: #155724;
+    }
+    
+    .status-offline {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .metric {
+      text-align: center;
+      padding: 12px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    
+    .metric-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #007bff;
+    }
+    
+    .metric-label {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    
+    .btn {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      flex: 1;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      transform: scale(1.05);
+    }
+    
+    .btn-toggle { background: #28a745; color: white; }
+    .btn-on { background: #007bff; color: white; }
+    .btn-off { background: #6c757d; color: white; }
+    
+    .mini-chart {
+      height: 120px;
+      margin-top: 10px;
+    }
+    
+    .last-seen {
+      font-size: 11px;
+      color: #999;
+      text-align: center;
+    }
+    
+    .connection-status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      display: inline-block;
+    }
+    
+    .connected { background: #d4edda; color: #155724; }
+    .disconnected { background: #f8d7da; color: #721c24; }
+    
+    .no-devices {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255,255,255,0.9);
+      border-radius: 12px;
+      margin: 20px 0;
+    }
+    
+    .device-count {
+      background: #007bff;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1 style="margin: 0; color: #333;">🌐 Multi-ESP32 Dashboard</h1>
+        <p style="margin: 5px 0 0 0; color: #666;">Real-time monitoring and control</p>
+      </div>
+      <div>
+        <span class="device-count" id="deviceCount">0 devices</span>
+        <span id="connectionStatus" class="connection-status disconnected">Disconnected</span>
+      </div>
+    </div>
+
+    <div id="devicesContainer" class="devices-grid">
+      <!-- Device cards will be added dynamically -->
+    </div>
+
+    <div id="noDevices" class="no-devices" style="display: none;">
+      <h3>🔍 No ESP32 devices connected</h3>
+      <p>Waiting for ESP32 devices to connect...</p>
+      <p><small>Make sure your ESP32 code is running and connected to the same network.</small></p>
+    </div>
+  </div>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Server connection
+    const params = new URLSearchParams(window.location.search);
+    const server = params.get('server') || window.location.origin;
+    const socket = io(server);
+
+    // DOM elements
+    const devicesContainer = document.getElementById('devicesContainer');
+    const noDevicesEl = document.getElementById('noDevices');
+    const statusEl = document.getElementById('connectionStatus');
+    const deviceCountEl = document.getElementById('deviceCount');
+
+    // Device data storage
+    const devices = new Map();
+    const charts = new Map();
+
+    // Socket events
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      statusEl.textContent = 'Connected';
+      statusEl.className = 'connection-status connected';
+      socket.emit('register_web');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      statusEl.textContent = 'Disconnected';
+      statusEl.className = 'connection-status disconnected';
+    });
+
+    socket.on('device_list', (deviceIds) => {
+      console.log('Device list received:', deviceIds);
+      updateDeviceCount(deviceIds.length);
+      
+      // Show/hide no devices message
+      if (deviceIds.length === 0) {
+        noDevicesEl.style.display = 'block';
+        devicesContainer.style.display = 'none';
+      } else {
+        noDevicesEl.style.display = 'none';
+        devicesContainer.style.display = 'grid';
+      }
+
+      // Remove devices not in the list
+      devices.forEach((_, deviceId) => {
+        if (!deviceIds.includes(deviceId)) {
+          removeDeviceCard(deviceId);
+        }
+      });
+
+      // Add new devices
+      deviceIds.forEach(deviceId => {
+        if (!devices.has(deviceId)) {
+          addDeviceCard(deviceId);
+        }
+      });
+    });
+
+    socket.on('telemetry', ({ deviceId, data, timestamp }) => {
+      console.log(`Telemetry from ${deviceId}:`, data);
+      updateDeviceData(deviceId, data, timestamp);
+    });
+
+    socket.on('device_disconnected', (deviceId) => {
+      console.log(`Device ${deviceId} disconnected`);
+      markDeviceOffline(deviceId);
+    });
+
+    function updateDeviceCount(count) {
+      deviceCountEl.textContent = `${count} device${count !== 1 ? 's' : ''}`;
+    }
+
+    function addDeviceCard(deviceId) {
+      const card = document.createElement('div');
+      card.className = 'device-card';
+      card.id = `device_${deviceId}`;
+      
+      card.innerHTML = `
+        <div class="device-header">
+          <div class="device-title">${deviceId}</div>
+          <div class="device-status status-online">ONLINE</div>
+        </div>
+        
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-value" id="temp_${deviceId}">--</div>
+            <div class="metric-label">Temperature (°C)</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value" id="hum_${deviceId}">--</div>
+            <div class="metric-label">Humidity (%)</div>
+          </div>
+        </div>
+        
+        <div class="controls">
+          <button class="btn btn-toggle" onclick="controlDevice('${deviceId}', 'toggle')">Toggle</button>
+          <button class="btn btn-on" onclick="controlDevice('${deviceId}', 'on')">LED ON</button>
+          <button class="btn btn-off" onclick="controlDevice('${deviceId}', 'off')">LED OFF</button>
+        </div>
+        
+        <div class="mini-chart">
+          <canvas id="chart_${deviceId}"></canvas>
+        </div>
+        
+        <div class="last-seen" id="seen_${deviceId}">--</div>
+      `;
+      
+      devicesContainer.appendChild(card);
+      
+      // Initialize device data
+      devices.set(deviceId, {
+        data: [],
+        lastSeen: Date.now()
+      });
+      
+      // Create mini chart
+      createMiniChart(deviceId);
+    }
+
+    function removeDeviceCard(deviceId) {
+      const card = document.getElementById(`device_${deviceId}`);
+      if (card) {
+        card.remove();
+      }
+      
+      // Destroy chart
+      if (charts.has(deviceId)) {
+        charts.get(deviceId).destroy();
+        charts.delete(deviceId);
+      }
+      
+      devices.delete(deviceId);
+    }
+
+    function createMiniChart(deviceId) {
+      const ctx = document.getElementById(`chart_${deviceId}`).getContext('2d');
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Temp',
+            data: [],
+            borderColor: '#ff6384',
+            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+            tension: 0.4,
+            pointRadius: 0,
+            borderWidth: 2
+          }, {
+            label: 'Hum',
+            data: [],
+            borderColor: '#36a2eb',
+            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+            tension: 0.4,
+            pointRadius: 0,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              display: false
+            },
+            y: {
+              display: false
+            }
+          },
+          elements: {
+            point: {
+              radius: 0
+            }
+          }
+        }
+      });
+      
+      charts.set(deviceId, chart);
+    }
+
+    function updateDeviceData(deviceId, data, timestamp) {
+      if (!devices.has(deviceId)) return;
+      
+      try {
+        const telemetry = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        // Update current values
+        document.getElementById(`temp_${deviceId}`).textContent = telemetry.temp.toFixed(1);
+        document.getElementById(`hum_${deviceId}`).textContent = telemetry.hum.toFixed(1);
+        document.getElementById(`seen_${deviceId}`).textContent = new Date().toLocaleTimeString();
+        
+        // Mark as online
+        const card = document.getElementById(`device_${deviceId}`);
+        card.classList.remove('disconnected');
+        const status = card.querySelector('.device-status');
+        status.textContent = 'ONLINE';
+        status.className = 'device-status status-online';
+        
+        // Update chart
+        const chart = charts.get(deviceId);
+        if (chart) {
+          const time = new Date().toLocaleTimeString();
+          chart.data.labels.push(time);
+          chart.data.datasets[0].data.push(telemetry.temp);
+          chart.data.datasets[1].data.push(telemetry.hum);
+          
+          // Keep only last 20 points
+          if (chart.data.labels.length > 20) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+            chart.data.datasets[1].data.shift();
+          }
+          
+          chart.update('none');
+        }
+        
+        // Update device data
+        devices.get(deviceId).lastSeen = timestamp;
+        
+      } catch (error) {
+        console.error('Error processing telemetry:', error);
+      }
+    }
+
+    function markDeviceOffline(deviceId) {
+      const card = document.getElementById(`device_${deviceId}`);
+      if (card) {
+        card.classList.add('disconnected');
+        const status = card.querySelector('.device-status');
+        status.textContent = 'OFFLINE';
+        status.className = 'device-status status-offline';
+      }
+    }
+
+    function controlDevice(deviceId, command) {
+      console.log(`Sending control to ${deviceId}: ${command}`);
+      socket.emit('control_device', {
+        deviceId: deviceId,
+        command: JSON.stringify({ cmd: command })
+      });
+    }
+
+    // Request device list on load
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        socket.emit('get_devices');
+      }, 1000);
+    });
+  </script>
+</body>
+</html>

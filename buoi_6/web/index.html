@@ -1,0 +1,868 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Advanced Multi-ESP32 Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    
+    body { 
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+      margin: 0;
+      padding: 20px; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+    
+    .container { 
+      max-width: 1600px; 
+      margin: 0 auto; 
+    }
+    
+    /* Header */
+    .header {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 25px;
+      border-radius: 16px;
+      margin-bottom: 25px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    
+    .header h1 {
+      margin: 0;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 2rem;
+      font-weight: 700;
+    }
+    
+    .header-stats {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    
+    .stat-badge {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    
+    .stat-devices { background: #e3f2fd; color: #1976d2; }
+    .stat-online { background: #e8f5e8; color: #2e7d32; }
+    .stat-offline { background: #ffebee; color: #d32f2f; }
+    .stat-connection.connected { background: #e8f5e8; color: #2e7d32; }
+    .stat-connection.disconnected { background: #ffebee; color: #d32f2f; }
+    
+    /* Device Grid */
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 25px;
+      margin-bottom: 25px;
+    }
+    
+    /* Device Card */
+    .device-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .device-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #4CAF50, #45a049);
+      transition: all 0.3s ease;
+    }
+    
+    .device-card.offline::before {
+      background: linear-gradient(90deg, #f44336, #d32f2f);
+    }
+    
+    .device-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+    }
+    
+    .device-card.offline {
+      opacity: 0.7;
+    }
+    
+    /* Card Header */
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .device-name {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .device-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    
+    .device-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .status-online {
+      background: #e8f5e8;
+      color: #2e7d32;
+    }
+    
+    .status-offline {
+      background: #ffebee;
+      color: #d32f2f;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    /* Metrics */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .metric-card {
+      background: #f8faff;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      border: 1px solid #e1e7f5;
+    }
+    
+    .metric-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    
+    .metric-temp { color: #ff6b35; }
+    .metric-hum { color: #1e88e5; }
+    
+    .metric-label {
+      font-size: 0.75rem;
+      color: #666;
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    
+    .metric-change {
+      font-size: 0.7rem;
+      margin-top: 4px;
+    }
+    
+    .change-up { color: #ff5722; }
+    .change-down { color: #2196f3; }
+    .change-stable { color: #4caf50; }
+    
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .control-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .control-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .control-btn:active {
+      transform: translateY(0);
+    }
+    
+    .btn-toggle { 
+      background: linear-gradient(135deg, #4caf50, #45a049); 
+      color: white; 
+    }
+    
+    .btn-on { 
+      background: linear-gradient(135deg, #2196f3, #1976d2); 
+      color: white; 
+    }
+    
+    .btn-off { 
+      background: linear-gradient(135deg, #757575, #616161); 
+      color: white; 
+    }
+    
+    .btn-toggle:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
+    .btn-on:hover { background: linear-gradient(135deg, #1976d2, #1565c0); }
+    .btn-off:hover { background: linear-gradient(135deg, #616161, #424242); }
+    
+    /* Chart */
+    .chart-container {
+      position: relative;
+      height: 200px;
+      margin-bottom: 15px;
+      background: #f8faff;
+      border-radius: 12px;
+      padding: 10px;
+      border: 1px solid #e1e7f5;
+    }
+    
+    /* Card Footer */
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: #666;
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+    }
+    
+    .data-count {
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-weight: 600;
+    }
+    
+    /* No Devices State */
+    .no-devices {
+      text-align: center;
+      padding: 60px 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    
+    .no-devices-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+    
+    .no-devices h3 {
+      margin: 0 0 10px 0;
+      color: #333;
+      font-size: 1.5rem;
+    }
+    
+    .no-devices p {
+      margin: 0 0 10px 0;
+      color: #666;
+    }
+    
+    /* Loading Animation */
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { padding: 15px; }
+      .header { padding: 20px; flex-direction: column; text-align: center; }
+      .devices-grid { grid-template-columns: 1fr; }
+      .device-card { padding: 20px; }
+      .controls { flex-direction: column; }
+      .control-btn { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <h1>🏭 Advanced IoT Dashboard</h1>
+        <p style="margin: 0; color: #666; font-size: 0.875rem;">Real-time multi-device monitoring & control</p>
+      </div>
+      <div class="header-stats">
+        <div class="stat-badge stat-devices" id="deviceCount">
+          <div class="loading"></div> Loading...
+        </div>
+        <div class="stat-badge stat-online" id="onlineCount">0 online</div>
+        <div class="stat-badge stat-connection disconnected" id="connectionStatus">
+          Connecting...
+        </div>
+      </div>
+    </div>
+
+    <!-- Device Grid -->
+    <div id="devicesContainer" class="devices-grid">
+      <!-- Device cards will be dynamically generated -->
+    </div>
+
+    <!-- No Devices State -->
+    <div id="noDevices" class="no-devices" style="display: none;">
+      <div class="no-devices-icon">🔍</div>
+      <h3>No ESP32 devices detected</h3>
+      <p>Waiting for ESP32 devices to connect and send telemetry data...</p>
+      <p style="color: #999; font-size: 0.8rem;">Make sure your ESP32 devices are powered on and connected to the same network.</p>
+    </div>
+  </div>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  
+  <script>
+    class ESP32Dashboard {
+      constructor() {
+        this.socket = null;
+        this.devices = new Map(); // deviceId -> device data
+        this.charts = new Map(); // deviceId -> Chart instance
+        this.isConnected = false;
+        
+        // DOM elements
+        this.devicesContainer = document.getElementById('devicesContainer');
+        this.noDevicesEl = document.getElementById('noDevices');
+        this.deviceCountEl = document.getElementById('deviceCount');
+        this.onlineCountEl = document.getElementById('onlineCount');
+        this.connectionStatusEl = document.getElementById('connectionStatus');
+        
+        this.init();
+      }
+
+      init() {
+        this.connectToServer();
+        this.setupEventListeners();
+      }
+
+      connectToServer() {
+        const params = new URLSearchParams(window.location.search);
+        const server = params.get('server') || window.location.origin;
+        
+        console.log('🔌 Connecting to server:', server);
+        this.socket = io(server);
+        
+        this.socket.on('connect', () => this.handleConnect());
+        this.socket.on('disconnect', () => this.handleDisconnect());
+        this.socket.on('device_list', (devices) => this.handleDeviceList(devices));
+        this.socket.on('telemetry', (data) => this.handleTelemetry(data));
+        this.socket.on('device_update', (data) => this.handleDeviceUpdate(data));
+        this.socket.on('device_disconnected', (deviceId) => this.handleDeviceDisconnected(deviceId));
+      }
+
+      handleConnect() {
+        console.log('✅ Connected to server');
+        this.isConnected = true;
+        this.updateConnectionStatus(true);
+        this.socket.emit('register_web');
+      }
+
+      handleDisconnect() {
+        console.log('❌ Disconnected from server');
+        this.isConnected = false;
+        this.updateConnectionStatus(false);
+      }
+
+      handleDeviceList(devices) {
+        console.log('📱 Device list updated:', devices);
+        
+        // Remove devices no longer in list
+        this.devices.forEach((_, deviceId) => {
+          if (!devices.find(d => d.deviceId === deviceId)) {
+            this.removeDeviceCard(deviceId);
+          }
+        });
+
+        // Add or update devices
+        devices.forEach(device => {
+          if (!this.devices.has(device.deviceId)) {
+            this.addDeviceCard(device);
+          } else {
+            this.updateDeviceInfo(device);
+          }
+        });
+
+        this.updateStats();
+      }
+
+      handleTelemetry(data) {
+        const { deviceId, data: telemetryData, timestamp } = data;
+        console.log(`📊 Telemetry from ${deviceId}:`, telemetryData);
+
+        if (!this.devices.has(deviceId)) {
+          // Auto-create card if device sends data but wasn't in device list
+          this.addDeviceCard({ deviceId, isOnline: true });
+        }
+
+        this.updateDeviceTelemetry(deviceId, telemetryData, timestamp);
+      }
+
+      handleDeviceUpdate(data) {
+        const { deviceId, ledState, isOnline, lastSeen } = data;
+        console.log(`🔄 Device update ${deviceId}:`, data);
+        
+        if (this.devices.has(deviceId)) {
+          const device = this.devices.get(deviceId);
+          device.ledState = ledState;
+          device.isOnline = isOnline;
+          device.lastSeen = lastSeen;
+          
+          this.updateDeviceStatus(deviceId);
+        }
+      }
+
+      handleDeviceDisconnected(deviceId) {
+        console.log(`🚫 Device disconnected: ${deviceId}`);
+        this.markDeviceOffline(deviceId);
+      }
+
+      addDeviceCard(deviceInfo) {
+        const { deviceId } = deviceInfo;
+        
+        if (this.devices.has(deviceId)) {
+          return; // Already exists
+        }
+
+        console.log(`➕ Adding card for device: ${deviceId}`);
+
+        const device = {
+          ...deviceInfo,
+          telemetryHistory: [],
+          lastTelemetry: null,
+          dataPoints: 0
+        };
+
+        this.devices.set(deviceId, device);
+
+        const card = this.createDeviceCardElement(deviceId);
+        this.devicesContainer.appendChild(card);
+        
+        // Create chart for this device
+        this.createDeviceChart(deviceId);
+        
+        this.updateVisibility();
+        this.updateStats();
+      }
+
+      createDeviceCardElement(deviceId) {
+        const card = document.createElement('div');
+        card.className = 'device-card';
+        card.id = `device-${deviceId}`;
+        
+        card.innerHTML = `
+          <div class="card-header">
+            <div class="device-name">
+              <div class="device-icon">${this.getDeviceIcon(deviceId)}</div>
+              ${deviceId}
+            </div>
+            <div class="device-status status-online" id="status-${deviceId}">
+              <div class="status-dot"></div>
+              Online
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value metric-temp" id="temp-${deviceId}">--</div>
+              <div class="metric-label">Temperature °C</div>
+              <div class="metric-change" id="temp-change-${deviceId}"></div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value metric-hum" id="hum-${deviceId}">--</div>
+              <div class="metric-label">Humidity %</div>
+              <div class="metric-change" id="hum-change-${deviceId}"></div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button class="control-btn btn-toggle" onclick="dashboard.controlDevice('${deviceId}', 'toggle')">
+              Toggle LED
+            </button>
+            <button class="control-btn btn-on" onclick="dashboard.controlDevice('${deviceId}', 'on')">
+              LED ON
+            </button>
+            <button class="control-btn btn-off" onclick="dashboard.controlDevice('${deviceId}', 'off')">
+              LED OFF
+            </button>
+          </div>
+
+          <div class="chart-container">
+            <canvas id="chart-${deviceId}"></canvas>
+          </div>
+
+          <div class="card-footer">
+            <div>
+              <span class="data-count" id="count-${deviceId}">0 data points</span>
+            </div>
+            <div id="lastSeen-${deviceId}">Never</div>
+          </div>
+        `;
+
+        return card;
+      }
+
+      createDeviceChart(deviceId) {
+        const ctx = document.getElementById(`chart-${deviceId}`).getContext('2d');
+        
+        const chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: [],
+            datasets: [{
+              label: 'Temperature (°C)',
+              data: [],
+              borderColor: '#ff6b35',
+              backgroundColor: 'rgba(255, 107, 53, 0.1)',
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              borderWidth: 2,
+              yAxisID: 'y'
+            }, {
+              label: 'Humidity (%)',
+              data: [],
+              borderColor: '#1e88e5',
+              backgroundColor: 'rgba(30, 136, 229, 0.1)',
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              borderWidth: 2,
+              yAxisID: 'y1'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                  usePointStyle: true,
+                  padding: 20
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: 'white',
+                bodyColor: 'white',
+                cornerRadius: 8
+              }
+            },
+            scales: {
+              x: {
+                display: true,
+                grid: {
+                  color: 'rgba(0, 0, 0, 0.1)'
+                }
+              },
+              y: {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                title: {
+                  display: true,
+                  text: 'Temperature (°C)',
+                  color: '#ff6b35'
+                },
+                grid: {
+                  color: 'rgba(0, 0, 0, 0.1)'
+                }
+              },
+              y1: {
+                type: 'linear',
+                display: true,
+                position: 'right',
+                title: {
+                  display: true,
+                  text: 'Humidity (%)',
+                  color: '#1e88e5'
+                },
+                grid: {
+                  drawOnChartArea: false,
+                }
+              }
+            }
+          }
+        });
+
+        this.charts.set(deviceId, chart);
+        console.log(`📈 Chart created for ${deviceId}`);
+      }
+
+      updateDeviceTelemetry(deviceId, telemetryData, timestamp) {
+        if (!this.devices.has(deviceId)) return;
+
+        const device = this.devices.get(deviceId);
+        const chart = this.charts.get(deviceId);
+
+        // Update device data
+        device.lastTelemetry = telemetryData;
+        device.dataPoints++;
+        device.lastSeen = timestamp;
+        device.isOnline = true;
+
+        // Store previous values for change calculation
+        const prevTemp = device.telemetryHistory.length > 0 ? 
+          device.telemetryHistory[device.telemetryHistory.length - 1].temp : null;
+        const prevHum = device.telemetryHistory.length > 0 ? 
+          device.telemetryHistory[device.telemetryHistory.length - 1].hum : null;
+
+        // Add to history
+        device.telemetryHistory.push({
+          ...telemetryData,
+          timestamp: timestamp
+        });
+
+        // Keep only last 50 points
+        if (device.telemetryHistory.length > 50) {
+          device.telemetryHistory.shift();
+        }
+
+        // Update UI elements
+        const tempEl = document.getElementById(`temp-${deviceId}`);
+        const humEl = document.getElementById(`hum-${deviceId}`);
+        const tempChangeEl = document.getElementById(`temp-change-${deviceId}`);
+        const humChangeEl = document.getElementById(`hum-change-${deviceId}`);
+        const countEl = document.getElementById(`count-${deviceId}`);
+        const lastSeenEl = document.getElementById(`lastSeen-${deviceId}`);
+
+        if (tempEl) tempEl.textContent = telemetryData.temp.toFixed(1);
+        if (humEl) humEl.textContent = telemetryData.hum.toFixed(1);
+        if (countEl) countEl.textContent = `${device.dataPoints} data points`;
+        if (lastSeenEl) lastSeenEl.textContent = new Date(timestamp).toLocaleTimeString();
+
+        // Update change indicators
+        if (prevTemp !== null && tempChangeEl) {
+          const tempChange = telemetryData.temp - prevTemp;
+          this.updateChangeIndicator(tempChangeEl, tempChange, '°C');
+        }
+        
+        if (prevHum !== null && humChangeEl) {
+          const humChange = telemetryData.hum - prevHum;
+          this.updateChangeIndicator(humChangeEl, humChange, '%');
+        }
+
+        // Update chart
+        if (chart) {
+          const timeLabel = new Date(timestamp).toLocaleTimeString();
+          chart.data.labels.push(timeLabel);
+          chart.data.datasets[0].data.push(telemetryData.temp);
+          chart.data.datasets[1].data.push(telemetryData.hum);
+
+          // Keep only last 30 points on chart
+          if (chart.data.labels.length > 30) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+            chart.data.datasets[1].data.shift();
+          }
+
+          chart.update('none');
+        }
+
+        // Update device status
+        this.updateDeviceStatus(deviceId);
+      }
+
+      updateChangeIndicator(element, change, unit) {
+        const absChange = Math.abs(change);
+        let className, symbol;
+
+        if (absChange < 0.1) {
+          className = 'change-stable';
+          symbol = '●';
+        } else if (change > 0) {
+          className = 'change-up';
+          symbol = '▲';
+        } else {
+          className = 'change-down';
+          symbol = '▼';
+        }
+
+        element.className = `metric-change ${className}`;
+        element.textContent = `${symbol} ${absChange.toFixed(1)}${unit}`;
+      }
+
+      updateDeviceStatus(deviceId) {
+        const device = this.devices.get(deviceId);
+        if (!device) return;
+
+        const card = document.getElementById(`device-${deviceId}`);
+        const statusEl = document.getElementById(`status-${deviceId}`);
+
+        if (device.isOnline) {
+          card.classList.remove('offline');
+          statusEl.className = 'device-status status-online';
+          statusEl.innerHTML = '<div class="status-dot"></div>Online';
+        } else {
+          card.classList.add('offline');
+          statusEl.className = 'device-status status-offline';
+          statusEl.innerHTML = '<div class="status-dot"></div>Offline';
+        }
+      }
+
+      markDeviceOffline(deviceId) {
+        if (this.devices.has(deviceId)) {
+          this.devices.get(deviceId).isOnline = false;
+          this.updateDeviceStatus(deviceId);
+          this.updateStats();
+        }
+      }
+
+      removeDeviceCard(deviceId) {
+        console.log(`➖ Removing card for device: ${deviceId}`);
+        
+        const card = document.getElementById(`device-${deviceId}`);
+        if (card) {
+          card.remove();
+        }
+
+        // Destroy chart
+        if (this.charts.has(deviceId)) {
+          this.charts.get(deviceId).destroy();
+          this.charts.delete(deviceId);
+        }
+
+        this.devices.delete(deviceId);
+        this.updateVisibility();
+        this.updateStats();
+      }
+
+      controlDevice(deviceId, command) {
+        console.log(`🎮 Sending control to ${deviceId}: ${command}`);
+        this.socket.emit('control_device', {
+          deviceId: deviceId,
+          command: { cmd: command }
+        });
+      }
+
+      updateStats() {
+        const totalDevices = this.devices.size;
+        const onlineDevices = Array.from(this.devices.values()).filter(d => d.isOnline).length;
+
+        this.deviceCountEl.textContent = `${totalDevices} device${totalDevices !== 1 ? 's' : ''}`;
+        this.onlineCountEl.textContent = `${onlineDevices} online`;
+      }
+
+      updateConnectionStatus(connected) {
+        if (connected) {
+          this.connectionStatusEl.textContent = 'Connected';
+          this.connectionStatusEl.className = 'stat-badge stat-connection connected';
+        } else {
+          this.connectionStatusEl.textContent = 'Disconnected';
+          this.connectionStatusEl.className = 'stat-badge stat-connection disconnected';
+        }
+      }
+
+      updateVisibility() {
+        if (this.devices.size === 0) {
+          this.noDevicesEl.style.display = 'block';
+          this.devicesContainer.style.display = 'none';
+        } else {
+          this.noDevicesEl.style.display = 'none';
+          this.devicesContainer.style.display = 'grid';
+        }
+      }
+
+      getDeviceIcon(deviceId) {
+        // Generate a simple icon based on device name
+        const icons = ['🔧', '📡', '🌡️', '💡', '⚡', '🔋', '📊', '🎛️'];
+        const hash = deviceId.split('').reduce((a, b) => {
+          a = ((a << 5) - a) + b.charCodeAt(0);
+          return a & a;
+        }, 0);
+        return icons[Math.abs(hash) % icons.length];
+      }
+
+      setupEventListeners() {
+        // Add any global event listeners here
+        window.addEventListener('beforeunload', () => {
+          if (this.socket) {
+            this.socket.disconnect();
+          }
+        });
+      }
+    }
+
+    // Initialize dashboard
+    const dashboard = new ESP32Dashboard();
+  </script>
+</body>
+</html>

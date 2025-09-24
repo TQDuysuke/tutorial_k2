@@ -1,0 +1,27 @@
+{
+  "name": "multi-esp32-dashboard",
+  "version": "1.0.0",
+  "description": "Multi-ESP32 IoT Dashboard with individual device management",
+  "main": "js/socket_io_server.js",
+  "scripts": {
+    "start": "node js/socket_io_server.js",
+    "dev": "nodemon js/socket_io_server.js"
+  },
+  "keywords": [
+    "esp32",
+    "iot",
+    "socket.io",
+    "dashboard",
+    "telemetry",
+    "multi-device"
+  ],
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "2.4.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "author": "ESP32 IoT Team",
+  "license": "MIT"
+}
