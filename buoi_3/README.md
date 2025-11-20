@@ -1,62 +1,41 @@
-ESP32 Telemetry Dashboard (buoi_3)
+# Buổi 3 — ESP32 Telemetry Dashboard (simple)
 
-This folder contains a small Express + Socket.IO (v2) server and a web dashboard that shows telemetry from ESP32 and lets you send LED control commands.
+Một ví dụ cơ bản: ESP32 gửi telemetry -> server Node.js (Socket.IO v2) -> dashboard web realtime.
 
 Quick start
 
-1. Install dependencies (run inside `buoi_3`):
+1. Mở terminal, vào thư mục `buoi_3` và cài dependencies:
 
-```bash
-npm install
-```
+	cd buoi_3
+	npm install
 
-2. Start the server:
+2. Chạy server:
 
-```bash
-npm start
-```
+	npm start
 
-3. Open the dashboard in your browser:
+3. Mở trình duyệt: http://localhost:3000
 
-Default (server and frontend on same host):
+Notes for ESP32
 
-```
-http://localhost:3000
-```
+- Use a Socket.IO v2-compatible client on the ESP32.
+- After connect, emit a register event:
 
-Specify a server IP (if dashboard is served from a different host or you want to point to a LAN IP):
+  socket.emit('register', 'esp');
 
-```
-http://localhost:3000/?server=http://192.168.1.36:3000
-```
-
-Replace `http://192.168.1.36:3000` with your server's IP and port.
-
-ESP32 (client) requirements
-
-- The ESP32 client should use `SocketIoClient` (compatible with Socket.IO v2).
-- After connecting, the ESP must register so the server can forward messages to it:
-
-```js
-socket.emit('register', 'esp');
-```
-
-- Send telemetry using the `telemetry` event, payload can be a JSON string or object, e.g. `{"temp":25.5,"hum":60}`.
-- Listen for `control` events on the ESP and implement LED control accordingly.
+- Send telemetry with event `telemetry` (JSON object/string). Listen for `control` events for LED commands.
 
 Server notes
 
-- This project pins `socket.io@2.4.1` in `package.json` for ESP32 compatibility. If you upgrade Socket.IO on the server, the ESP32 `SocketIoClient` may not work correctly.
-- If the server machine has a firewall, allow TCP port 3000.
+- `socket.io@2.4.1` is used for ESP32 compatibility. Upgrading Socket.IO on the server may break the native ESP32 client.
+- Open port 3000 in firewall if devices are on different networks.
 
-Files of interest
+Files
 
-- `js/socket_io_server.js` — Express + Socket.IO server that relays telemetry and control messages.
-- `web/index.html` — frontend dashboard connecting to the server via Socket.IO. It accepts an optional `?server=` query parameter to override the connection target.
+- `js/socket_io_server.js` — server entry
+- `web/index.html` — frontend dashboard (supports `?server=` query parameter)
 
 Troubleshooting
 
-- If the dashboard shows no data, ensure the ESP32 and the server are on the same network and that the ESP sends `register` and `telemetry` events.
-- To test quickly, open the dashboard with `?server=` pointing at the server IP; e.g. `http://localhost:3000/?server=http://192.168.1.36:3000`.
+- No data: check ESP is connected to same network, and that it emits `register` and `telemetry` events.
+- Quick test: open `http://localhost:3000/?server=http://<SERVER_IP>:3000` to force a server IP.
 
-If you want, I can add a small UI enhancement to select which ESP device to control or add explicit ON/OFF buttons for the LED.
